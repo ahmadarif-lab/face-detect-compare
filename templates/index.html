@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Face Detection & Compare</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+
+<header class="topbar">
+    <div class="brand">
+        <div class="brand-mark">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                <circle cx="12" cy="11" r="3"/><path d="M7 18a5 5 0 0 1 10 0"/>
+            </svg>
+        </div>
+        <div>
+            <h1>Face Detection &amp; Compare</h1>
+            <span class="brand-sub">RetinaFace · ArcFace</span>
+        </div>
+    </div>
+    <div class="status-pill"><span class="status-led"></span> SYSTEM ONLINE</div>
+</header>
+
+<main class="container">
+    <div class="tabs" role="tablist">
+        <button class="tab active" data-target="pane-detect" role="tab">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg>
+            Face Detection
+        </button>
+        <button class="tab" data-target="pane-compare" role="tab">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
+            Face Compare
+        </button>
+        <button class="tab" data-target="pane-info" role="tab">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            Info
+        </button>
+    </div>
+
+    <!-- DETECT PANE -->
+    <section id="pane-detect" class="pane active">
+        <div class="grid grid-5-7">
+            <div class="card">
+                <div class="card-head">
+                    <h2>Upload Foto</h2>
+                    <p>Deteksi semua wajah pada satu foto dengan RetinaFace.</p>
+                </div>
+                <form id="detectForm">
+                    <label class="dropzone" id="detectDrop">
+                        <input type="file" name="image" id="detectFile" accept="image/*" required hidden>
+                        <div class="dz-empty">
+                            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            <div class="dz-title">Drop atau klik untuk upload</div>
+                            <div class="dz-sub">PNG · JPG · JPEG · BMP · WEBP</div>
+                        </div>
+                        <img id="detectPreview" class="dz-preview" alt="">
+                    </label>
+                    <button class="btn-primary" type="submit" id="detectBtn">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2"/></svg>
+                        Deteksi Wajah
+                    </button>
+                </form>
+            </div>
+            <div class="card">
+                <div class="card-head">
+                    <h2>Hasil</h2>
+                    <p>Bounding box, score, dan landmark setiap wajah.</p>
+                </div>
+                <div id="detectLoader" class="loader hidden">
+                    <div class="scanner">
+                        <div class="scan-frame">
+                            <span class="corner tl"></span><span class="corner tr"></span>
+                            <span class="corner bl"></span><span class="corner br"></span>
+                            <span class="scan-line"></span>
+                            <svg class="scan-face" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="32" cy="28" r="10"/>
+                                <path d="M16 52c2-9 8-13 16-13s14 4 16 13"/>
+                            </svg>
+                        </div>
+                        <div class="scan-text"><span class="led"></span><span>ANALYZING<span class="dots"></span></span></div>
+                    </div>
+                </div>
+                <div id="detectError" class="alert alert-danger hidden"></div>
+                <div id="detectEmpty" class="empty-state">
+                    <div class="empty-icon">
+                        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </div>
+                    Belum ada hasil. Upload foto lalu klik <b>Deteksi Wajah</b>.
+                </div>
+                <div id="detectResult" class="hidden">
+                    <div class="badge-row">
+                        <span class="badge-count" id="detectCount">0</span>
+                        <span>wajah terdeteksi</span>
+                        <span class="legend"><span class="dot dot-active"></span>aktif</span>
+                        <span class="legend"><span class="dot dot-other"></span>lainnya</span>
+                    </div>
+                    <div class="overlay-wrap interactive">
+                        <img id="detectImg" alt="">
+                        <svg id="detectOverlay" preserveAspectRatio="xMidYMid meet"></svg>
+                    </div>
+                    <div class="face-nav hidden" id="detectFaceNav">
+                        <button type="button" id="detectPrev" class="nav-btn">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            Prev
+                        </button>
+                        <span class="face-nav-counter">Wajah <b id="detectSelectedIdx">1</b> / <b id="detectTotal">1</b></span>
+                        <button type="button" id="detectNext" class="nav-btn">
+                            Next
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    </div>
+                    <div class="caption" id="detectFacesLabel" style="margin-top:16px;">Detail wajah aktif</div>
+                    <div class="active-face-card hidden" id="detectActiveFace"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- COMPARE PANE -->
+    <section id="pane-compare" class="pane">
+        <div class="card">
+            <div class="card-head">
+                <h2>Bandingkan Dua Wajah</h2>
+                <p>Upload dua foto (boleh banyak wajah). Sistem mendeteksi setiap wajah, lalu mencari pasangan paling mirip dengan ArcFace.</p>
+            </div>
+            <form id="compareForm">
+                <div class="grid grid-2">
+                    <div>
+                        <div class="label">Foto 1</div>
+                        <label class="dropzone" id="compareDrop1">
+                            <input type="file" name="image1" id="compareFile1" accept="image/*" required hidden>
+                            <div class="dz-empty">
+                                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <div class="dz-sub">Drop atau klik</div>
+                            </div>
+                            <img id="comparePreview1" class="dz-preview" alt="">
+                        </label>
+                    </div>
+                    <div>
+                        <div class="label">Foto 2</div>
+                        <label class="dropzone" id="compareDrop2">
+                            <input type="file" name="image2" id="compareFile2" accept="image/*" required hidden>
+                            <div class="dz-empty">
+                                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <div class="dz-sub">Drop atau klik</div>
+                            </div>
+                            <img id="comparePreview2" class="dz-preview" alt="">
+                        </label>
+                    </div>
+                </div>
+                <button class="btn-primary" type="submit" id="compareBtn">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
+                    Bandingkan
+                </button>
+            </form>
+
+            <div id="compareLoader" class="loader hidden">
+                <div class="dual-scanner">
+                    <div class="scanner small">
+                        <div class="scan-frame">
+                            <span class="corner tl"></span><span class="corner tr"></span>
+                            <span class="corner bl"></span><span class="corner br"></span>
+                            <span class="scan-line"></span>
+                            <svg class="scan-face" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="28" r="10"/><path d="M16 52c2-9 8-13 16-13s14 4 16 13"/></svg>
+                        </div>
+                    </div>
+                    <div class="link-line"><span class="link-pulse"></span></div>
+                    <div class="scanner small">
+                        <div class="scan-frame">
+                            <span class="corner tl"></span><span class="corner tr"></span>
+                            <span class="corner bl"></span><span class="corner br"></span>
+                            <span class="scan-line"></span>
+                            <svg class="scan-face" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="28" r="10"/><path d="M16 52c2-9 8-13 16-13s14 4 16 13"/></svg>
+                        </div>
+                    </div>
+                </div>
+                <div class="scan-text"><span class="led"></span><span>MATCHING FACES<span class="dots"></span></span></div>
+            </div>
+
+            <div id="compareError" class="alert alert-danger hidden"></div>
+
+            <div id="compareResult" class="hidden">
+                <div id="compareVerdict" class="verdict"></div>
+
+                <div class="grid grid-2 mt-4">
+                    <div>
+                        <div class="caption">
+                            Foto 1 — <b id="cmpCount1">0</b> wajah · target
+                            <span class="legend"><span class="dot dot-match"></span>match</span>
+                            <span class="legend"><span class="dot dot-other"></span>lainnya</span>
+                        </div>
+                        <div class="overlay-wrap interactive">
+                            <img id="cmpImg1" alt="">
+                            <svg id="cmpOverlay1" preserveAspectRatio="xMidYMid meet"></svg>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="caption">
+                            Foto 2 — <b id="cmpCount2">0</b> wajah · query
+                            <span class="legend"><span class="dot dot-active"></span>dipilih</span>
+                        </div>
+                        <div class="overlay-wrap interactive">
+                            <img id="cmpImg2" alt="">
+                            <svg id="cmpOverlay2" preserveAspectRatio="xMidYMid meet"></svg>
+                        </div>
+                        <div class="face-nav hidden" id="cmpFaceNav">
+                            <button type="button" id="cmpPrev" class="nav-btn">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                                Prev
+                            </button>
+                            <span class="face-nav-counter">Wajah <b id="cmpSelectedIdx">1</b> / <b id="cmpTotal">1</b></span>
+                            <button type="button" id="cmpNext" class="nav-btn">
+                                Next
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="match-row">
+                    <div class="match-item">
+                        <div class="caption">Wajah dipilih · Foto 2 (#<b id="cmpIdx2">-</b>)</div>
+                        <img id="cmpCrop2" class="face-crop" alt="">
+                    </div>
+                    <div class="match-arrow">
+                        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
+                    </div>
+                    <div class="match-item">
+                        <div class="caption">Match terbaik · Foto 1 (#<b id="cmpIdx1">-</b>)</div>
+                        <img id="cmpCrop1" class="face-crop" alt="">
+                    </div>
+                </div>
+
+                <div class="similarity-hero">
+                    <div>
+                        <div class="hero-label">Cosine Similarity</div>
+                        <div class="hero-sub">Skor utama untuk verifikasi ArcFace</div>
+                    </div>
+                    <div class="hero-value" id="cmpSimilarity">-</div>
+                </div>
+
+                <div class="caption section-caption" style="margin-top:18px;">Distance per algoritma</div>
+                <div class="metrics-grid" id="metricsGrid"></div>
+
+                <p class="info-pointer">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    <span>Tidak paham angka-angka ini? Buka tab <b>Info</b> untuk penjelasan rumus, threshold, dan referensi.</span>
+                </p>
+
+            </div>
+        </div>
+    </section>
+
+    <section id="pane-info" class="pane">
+        <div class="card">
+            <div class="card-head">
+                <h2>Info Algoritma &amp; Threshold</h2>
+                <p>Penjelasan rumus, threshold, dan referensi untuk metrik distance yang dipakai aplikasi.</p>
+            </div>
+            <div class="metric-info-body">
+                        <h4>RetinaFace vs ArcFace — apa bedanya?</h4>
+                        <p class="hint-note">
+                            <b>RetinaFace</b> hanyalah <i>nama model</i> untuk <b>mendeteksi posisi wajah</b> di dalam foto (bounding box + landmark). Walau namanya mengandung kata "retina", model ini <b>tidak mendeteksi retina mata</b> — itu hanya nama yang dipilih oleh penelitinya. RetinaFace juga <b>tidak dipakai untuk membandingkan wajah</b>.<br><br>
+                            <b>ArcFace</b> adalah model berbeda yang dipakai untuk <b>membandingkan kemiripan wajah</b>. Ia mengubah tiap wajah jadi vektor 512-dimensi (embedding), lalu jarak antar vektor diukur untuk menentukan apakah dua wajah identitas yang sama.<br><br>
+                            Singkatnya: tab <b>Detect</b> memakai RetinaFace (cari wajah), tab <b>Compare</b> memakai RetinaFace + ArcFace (cari wajah lalu bandingkan).
+                        </p>
+
+                        <h4>Embedding 512-dimensi itu isinya apa?</h4>
+                        <p>Embedding adalah <b>daftar 512 angka</b> hasil "perasan" model ArcFace dari satu wajah. Bayangkan setiap wajah diringkas jadi satu deret angka panjang seperti ini:</p>
+                        <div class="formula-block">
+                            <div class="formula-name">Contoh embedding (sebagian)</div>
+                            <div class="formula-eq" style="font-size:0.78rem;">[ 0.0214, −0.1183, 0.0457, −0.0921, 0.1304, …, −0.0066, 0.0812 ]</div>
+                            <div class="formula-desc">Total ada 512 angka seperti di atas. Tiap angka biasanya kecil (rentang ±1) dan tidak punya arti yang bisa dibaca manusia.</div>
+                        </div>
+
+                        <p><b>Tiap angka itu mewakili apa?</b> Tidak ada label seperti "lebar hidung", "warna mata", atau "jarak antar mata". Angka-angka itu adalah <i>fitur abstrak</i> yang ditemukan sendiri oleh neural network selama training — kombinasi pola tepi, tekstur kulit, bentuk geometris, dan relasi antar bagian wajah, yang oleh model dianggap berguna untuk membedakan satu orang dengan orang lain.</p>
+
+                        <p><b>Analogi sederhana:</b> bayangkan 512 "juri" yang masing-masing memberi nilai pada wajah dari sudut pandang yang berbeda. Juri ke-1 mungkin sensitif pada pola alis + dahi, juri ke-2 pada tekstur pipi, dst. — tapi sudut pandang tiap juri tidak bisa diterjemahkan ke bahasa manusia. Yang penting: <b>dua foto orang yang sama akan menghasilkan 512 nilai yang mirip</b>, dan dua foto orang yang berbeda akan menghasilkan pola nilai yang berbeda.</p>
+
+                        <p><b>Yang bukan disimpan di embedding:</b> embedding bukan foto, bukan kompresi gambar, dan tidak bisa dibalik untuk merekonstruksi wajah aslinya secara persis. Ia hanya menyimpan "ciri pembeda identitas" yang cukup untuk verifikasi — bukan rambut, bukan ekspresi, bukan latar, bukan pencahayaan (idealnya).</p>
+
+                        <p><b>Kenapa 512 angka?</b> Itu pilihan arsitektur ArcFace. Lebih sedikit dimensi → kurang ekspresif, susah membedakan jutaan orang. Lebih banyak → mahal komputasi tanpa banyak peningkatan akurasi. 512 dianggap sweet spot oleh para peneliti.</p>
+
+                        <p><b>Bagaimana cara membandingkan?</b> Kita ambil dua embedding (vektor 512 angka), lalu hitung <i>jarak</i>-nya pakai rumus seperti Cosine atau Euclidean. Kalau jaraknya kecil → wajah mirip. Kalau jaraknya besar → wajah beda. Threshold-nya sudah dikalibrasi DeepFace (lihat di bawah).</p>
+
+                        <h4>Rumus tiap algoritma</h4>
+                        <p>Untuk dua vektor embedding ArcFace 512-dimensi <code>a</code> dan <code>b</code>:</p>
+
+                        <div class="formula-block">
+                            <div class="formula-name">Cosine Distance</div>
+                            <div class="formula-eq">
+                                d = 1 −
+                                <span class="frac">
+                                    <span class="num">a · b</span>
+                                    <span class="den">‖a‖ × ‖b‖</span>
+                                </span>
+                            </div>
+                            <div class="formula-desc">Mengukur sudut antar vektor. Range ~[0, 2]. <b>Metrik utama</b> untuk verifikasi ArcFace.</div>
+                        </div>
+
+                        <div class="formula-block">
+                            <div class="formula-name">Euclidean</div>
+                            <div class="formula-eq">d = √<span class="radicand">Σ (aᵢ − bᵢ)²</span></div>
+                            <div class="formula-desc">Jarak garis lurus antar dua titik. Sensitif terhadap panjang (magnitudo) vektor.</div>
+                        </div>
+
+                        <div class="formula-block">
+                            <div class="formula-name">Euclidean L2</div>
+                            <div class="formula-eq">
+                                a' =
+                                <span class="frac">
+                                    <span class="num">a</span>
+                                    <span class="den">‖a‖</span>
+                                </span>
+                                <span class="eq-comma">,</span>
+                                b' =
+                                <span class="frac">
+                                    <span class="num">b</span>
+                                    <span class="den">‖b‖</span>
+                                </span>
+                            </div>
+                            <div class="formula-eq">d = √<span class="radicand">Σ (a'ᵢ − b'ᵢ)²</span></div>
+                            <div class="formula-desc">Sama dengan Euclidean, tapi vektor di-normalize jadi panjang 1 dulu. Range [0, 2].</div>
+                        </div>
+
+                        <div class="formula-block">
+                            <div class="formula-name">Manhattan (L1)</div>
+                            <div class="formula-eq">d = Σ |aᵢ − bᵢ|</div>
+                            <div class="formula-desc">Total selisih absolut tiap dimensi. Untuk 512-dim, nilainya jadi besar.</div>
+                        </div>
+
+                        <div class="formula-block">
+                            <div class="formula-name">Chebyshev (L∞)</div>
+                            <div class="formula-eq">d = max |aᵢ − bᵢ|</div>
+                            <div class="formula-desc">Selisih terbesar di antara semua dimensi. Nilainya cenderung kecil.</div>
+                        </div>
+
+                        <h4>Bedanya Euclidean dan Euclidean L2?</h4>
+                        <p>Bedanya cuma satu: ada langkah <b>normalisasi</b> sebelum hitung jarak.</p>
+                        <ul>
+                            <li><b>Euclidean (raw)</b> — sensitif magnitudo. Kalau panjang embedding kebetulan besar (karena pencahayaan, kualitas foto, dll), distance ikut besar walau arah-nya sebetulnya mirip.</li>
+                            <li><b>Euclidean L2</b> — vektor di-L2-normalize dulu jadi panjang 1, jadi yang dibandingkan cuma <b>arah/sudut</b>-nya.</li>
+                        </ul>
+                        <p>ArcFace dilatih dengan <i>angular margin loss</i> — identitas wajah tersimpan di <b>arah</b> vektor, bukan panjangnya. Jadi Euclidean L2 biasanya lebih stabil untuk verifikasi wajah dibanding Euclidean biasa.</p>
+                        <p>Secara matematis, Euclidean L2 dan Cosine sebenarnya membawa informasi yang sama (sudut antar vektor), dengan hubungan:</p>
+                        <div class="formula-eq">Euclidean_L2² = 2 × Cosine_distance</div>
+                        <p>Itu sebabnya threshold-nya konsisten: Cosine <code>0.68</code> ↔ Euclidean L2 <code>√(2 × 0.68) ≈ 1.166</code>, dibulatkan jadi <code>1.13</code> ✓</p>
+
+                        <h4>Kenapa threshold tiap algoritma berbeda?</h4>
+                        <p>Karena tiap rumus menghasilkan skala angka yang berbeda — distance Manhattan untuk pasangan wajah yang sama bisa puluhan, sedangkan Chebyshev cuma di angka satuan. Threshold <code>0.68 / 4.15 / 1.13</code> bukan dipilih sembarang — itu nilai kalibrasi resmi DeepFace, hasil pengujian ArcFace pada dataset wajah berlabel (LFW dll) untuk cari batas optimal "orang sama" vs "orang beda" per metrik.</p>
+
+                        <h4>Kenapa Manhattan &amp; Chebyshev cuma "INFO"?</h4>
+                        <p>DeepFace tidak menyediakan threshold resmi untuk dua metrik ini pada ArcFace, jadi tidak ada angka kalibrasi yang valid untuk memutuskan MATCH / NO MATCH. Keduanya tetap dihitung sebagai info tambahan untuk perbandingan, tapi tidak dipakai untuk verdict.</p>
+
+                        <h4>Metrik mana yang paling utama?</h4>
+                        <p><b>Cosine</b>. Itu metrik default DeepFace untuk verifikasi ArcFace, dan paling stabil untuk embedding-nya. Verdict utama (MATCH / NO MATCH) di aplikasi ini selalu memakai cosine.</p>
+
+                        <h4>Sumber &amp; Referensi</h4>
+                        <p class="ref-group-label">Paper Model</p>
+                        <ul class="ref-list">
+                            <li>
+                                <b>ArcFace</b> — Deng et al., <i>"ArcFace: Additive Angular Margin Loss for Deep Face Recognition"</i>, CVPR 2019.
+                                <a href="https://arxiv.org/abs/1801.07698" target="_blank" rel="noopener">arxiv.org/abs/1801.07698</a>
+                            </li>
+                            <li>
+                                <b>RetinaFace</b> — Deng et al., <i>"RetinaFace: Single-stage Dense Face Localisation in the Wild"</i>, 2019.
+                                <a href="https://arxiv.org/abs/1905.00641" target="_blank" rel="noopener">arxiv.org/abs/1905.00641</a>
+                            </li>
+                            <li>
+                                <b>DeepFace framework</b> — Serengil &amp; Ozpinar, <i>"LightFace: A Hybrid Deep Face Recognition Framework"</i>, ASYU 2020.
+                                <a href="https://ieeexplore.ieee.org/document/9259802" target="_blank" rel="noopener">ieeexplore.ieee.org/document/9259802</a>
+                            </li>
+                        </ul>
+
+                        <p class="ref-group-label">Repository GitHub</p>
+                        <ul class="ref-list">
+                            <li>
+                                <b>serengil/deepface</b> — implementasi ArcFace + verifikasi multi-metrik.
+                                <a href="https://github.com/serengil/deepface" target="_blank" rel="noopener">github.com/serengil/deepface</a>
+                            </li>
+                            <li>
+                                <b>serengil/retinaface</b> — implementasi RetinaFace untuk face detection.
+                                <a href="https://github.com/serengil/retinaface" target="_blank" rel="noopener">github.com/serengil/retinaface</a>
+                            </li>
+                        </ul>
+
+                        <p class="ref-group-label">Threshold resmi DeepFace</p>
+                        <ul class="ref-list">
+                            <li>
+                                Nilai threshold per model &amp; metrik di-hardcode di file config (ArcFace ada di baris 5 — <code>cosine: 0.68</code>, <code>euclidean: 4.15</code>, <code>euclidean_l2: 1.13</code>):
+                                <a href="https://github.com/serengil/deepface/blob/master/deepface/config/threshold.py#L5" target="_blank" rel="noopener">deepface/config/threshold.py</a>
+                            </li>
+                            <li>
+                                Lookup-nya lewat fungsi <code>find_threshold(model_name, distance_metric)</code> yang load dict di atas:
+                                <a href="https://github.com/serengil/deepface/blob/master/deepface/modules/verification.py#L477" target="_blank" rel="noopener">deepface/modules/verification.py</a>
+                            </li>
+                        </ul>
+
+                        <p class="ref-group-label">Dataset Evaluasi</p>
+                        <ul class="ref-list">
+                            <li>
+                                <b>LFW</b> — Labeled Faces in the Wild, dataset standar untuk benchmark verifikasi wajah (Huang et al., UMass 2007). Situs aslinya <code>vis-www.cs.umass.edu/lfw</code> sering tidak bisa diakses, jadi pakai mirror berikut:
+                                <a href="https://people.cs.umass.edu/~elm/papers/lfw.pdf" target="_blank" rel="noopener">paper · people.cs.umass.edu/~elm/papers/lfw.pdf</a>
+                                <a href="https://www.tensorflow.org/datasets/catalog/lfw" target="_blank" rel="noopener">tensorflow.org/datasets/catalog/lfw</a>
+                                <a href="https://scikit-learn.org/stable/modules/generated/sklearn.datasets.fetch_lfw_pairs.html" target="_blank" rel="noopener">scikit-learn.org · fetch_lfw_pairs</a>
+                            </li>
+                        </ul>
+                    </div>
+            </div>
+        </div>
+    </section>
+</main>
+
+<footer class="footer">
+    <span>Powered by <a href="https://github.com/serengil/retinaface" target="_blank" rel="noopener">serengil/retinaface</a> + <a href="https://github.com/serengil/deepface" target="_blank" rel="noopener">deepface</a></span>
+</footer>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
