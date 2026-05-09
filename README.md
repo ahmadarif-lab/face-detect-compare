@@ -23,13 +23,15 @@ Aplikasi web sederhana untuk **face detection** dan **face comparison** dengan A
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 2. install dependencies
-pip install -r requirements.txt
+# 2. install dependencies — pilih SATU sesuai backend yang dipakai
+pip install -r requirements-onnx.txt       # untuk backend onnx (default)
+# ATAU
+pip install -r requirements-deepface.txt   # untuk backend deepface
 ```
 
 > **Catatan:** Saat pertama kali menjalankan endpoint, library akan men-download
-> bobot model (RetinaFace ~100MB + ArcFace ~130MB untuk backend `deepface`,
-> atau buffalo_l ~280MB untuk backend `onnx`). Pastikan koneksi internet tersedia.
+> bobot model (buffalo_l ~280MB untuk backend `onnx`, atau RetinaFace ~100MB +
+> ArcFace ~130MB untuk backend `deepface`). Pastikan koneksi internet tersedia.
 
 ## Pilih Backend Inference
 
@@ -37,14 +39,14 @@ App mendukung dua backend yang dipilih lewat env var `FACE_BACKEND`:
 
 | Backend | Detector | Embedding | Kelebihan |
 |---------|----------|-----------|-----------|
-| `deepface` (default) | RetinaFace (TF) | ArcFace (TF/Keras) | Akurasi RetinaFace bagus untuk wajah kecil/multi-face |
-| `onnx`               | SCRFD (ONNX)   | ArcFace (ONNX)    | Lebih cepat, footprint kecil, cocok untuk CPU & deployment |
+| `onnx` (default) | SCRFD (ONNX) | ArcFace (ONNX) | Lebih cepat, footprint kecil, cocok untuk CPU & deployment |
+| `deepface`       | RetinaFace (TF) | ArcFace (TF/Keras) | Akurasi RetinaFace bagus untuk wajah kecil/multi-face |
 
-Kedua backend sudah terinstall dari `requirements.txt` — tinggal pilih saat runtime.
+Tiap backend punya `requirements-*.txt` dan `Dockerfile` sendiri — pilih sesuai kebutuhan.
 
 ## Menjalankan
 
-### Backend `deepface` (default — RetinaFace + DeepFace)
+### Backend `onnx` (default — InsightFace SCRFD + ArcFace ONNX)
 
 ```bash
 python app.py
@@ -52,27 +54,42 @@ python app.py
 PORT=8000 python app.py
 ```
 
-### Backend `onnx` (InsightFace SCRFD + ArcFace ONNX)
+### Backend `deepface` (RetinaFace + DeepFace)
 
 ```bash
-FACE_BACKEND=onnx python app.py
-
-# kombinasi env var:
-FACE_BACKEND=onnx PORT=8000 python app.py
+FACE_BACKEND=deepface python app.py
 ```
 
 ### Production (gunicorn)
 
 ```bash
-# default backend
+# default backend (onnx)
 gunicorn --bind 0.0.0.0:7860 --workers 1 --timeout 300 app:app
 
-# pakai onnx
-FACE_BACKEND=onnx gunicorn --bind 0.0.0.0:7860 --workers 1 --timeout 300 app:app
+# pakai deepface
+FACE_BACKEND=deepface gunicorn --bind 0.0.0.0:7860 --workers 1 --timeout 300 app:app
 ```
 
 > **Penting**: pakai `--workers 1`. Tiap worker me-load model ~300MB ke RAM,
 > dan model di-load di import-time (warmup). Multiple workers = multiple loads.
+
+### Docker
+
+Dua Dockerfile tersedia untuk masing-masing backend:
+
+```bash
+# backend onnx (default — pakai Dockerfile)
+docker build -t face-detect .
+docker run --rm -p 7860:7860 face-detect
+
+# backend deepface (pakai Dockerfile.deepface)
+docker build -f Dockerfile.deepface -t face-detect-deepface .
+docker run --rm -p 7860:7860 face-detect-deepface
+```
+
+> **HF Space**: HF Space hanya melihat file bernama `Dockerfile`. Untuk switch
+> backend, ganti isi `Dockerfile` dengan isi `Dockerfile.deepface` (atau swap
+> filename) lalu commit + push.
 
 ### Dev mode (auto-reload)
 
@@ -90,9 +107,9 @@ Buka http://localhost:5001
 
 | Var | Default | Keterangan |
 |-----|---------|-----------|
-| `FACE_BACKEND` | `deepface` | `deepface` atau `onnx` |
-| `PORT`         | `5001`     | port HTTP |
-| `FLASK_DEBUG`  | `0`        | set `1` untuk auto-reload + debugger |
+| `FACE_BACKEND` | `onnx`   | `onnx` atau `deepface` |
+| `PORT`         | `5001`   | port HTTP |
+| `FLASK_DEBUG`  | `0`      | set `1` untuk auto-reload + debugger |
 
 ## Endpoints
 
@@ -157,12 +174,16 @@ Response (ringkas):
 
 ```
 .
-├── app.py                # backend Flask
-├── requirements.txt
+├── app.py                       # backend Flask
+├── requirements.txt             # core deps (flask, opencv, dst)
+├── requirements-onnx.txt        # core + insightface + onnxruntime
+├── requirements-deepface.txt    # core + retina-face + deepface + tf-keras
+├── Dockerfile                   # build image untuk backend onnx (default)
+├── Dockerfile.deepface          # build image untuk backend deepface
 ├── templates/
 │   └── index.html
 ├── static/
 │   ├── style.css
 │   └── script.js
-└── uploads/              # auto-created, file dihapus setelah inference
+└── uploads/                     # auto-created, file dihapus setelah inference
 ```

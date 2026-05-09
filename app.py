@@ -14,8 +14,8 @@ from PIL import Image
 # Config & constants
 # ---------------------------------------------------------------------------
 
-# FACE_BACKEND=deepface (default) atau FACE_BACKEND=onnx
-FACE_BACKEND = os.environ.get("FACE_BACKEND", "deepface").lower()
+# FACE_BACKEND=onnx (default) atau FACE_BACKEND=deepface
+FACE_BACKEND = os.environ.get("FACE_BACKEND", "onnx").lower()
 
 DETECTION_SIZE = (640, 640)
 WARMUP_IMG_SHAPE = (112, 112, 3)
@@ -55,7 +55,14 @@ METRIC_LABELS = {
 
 if FACE_BACKEND == "onnx":
     from insightface.app import FaceAnalysis as _FaceAnalysis
-    _insight_app = _FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+    # buffalo_l bundles 5 models (detection, recognition, 2 landmark, genderage);
+    # we only use detection + recognition. Skipping the rest cuts per-face work
+    # from 5 inferences to 2 and reduces RAM by ~150 MB.
+    _insight_app = _FaceAnalysis(
+        name="buffalo_l",
+        providers=["CPUExecutionProvider"],
+        allowed_modules=["detection", "recognition"],
+    )
     _insight_app.prepare(ctx_id=0, det_size=DETECTION_SIZE)
 else:
     from retinaface import RetinaFace

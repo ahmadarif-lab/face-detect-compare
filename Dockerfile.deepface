@@ -2,25 +2,26 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# build-essential: needed for insightface Cython compilation
+# build-essential + libhdf5-dev: needed for tensorflow / keras (h5py)
 # libgl1 + libglib2.0-0: required by opencv-python-headless
-# libgomp1: OpenMP runtime used by ONNX Runtime
+# libgomp1: OpenMP runtime
 RUN apt-get update && apt-get install -y \
     build-essential \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
+    libhdf5-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt requirements-onnx.txt ./
-RUN pip install --no-cache-dir -r requirements-onnx.txt
+COPY requirements.txt requirements-deepface.txt ./
+RUN pip install --no-cache-dir -r requirements-deepface.txt
 
 COPY . .
 
 RUN mkdir -p uploads
 
 ENV PORT=7860
-ENV FACE_BACKEND=onnx
+ENV FACE_BACKEND=deepface
 EXPOSE 7860
 
 # 1 worker supaya model tidak di-load berkali-kali, timeout panjang untuk inference ML
