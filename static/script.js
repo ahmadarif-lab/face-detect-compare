@@ -62,10 +62,15 @@ const detectError = document.getElementById("detectError");
 const detectEmpty = document.getElementById("detectEmpty");
 const detectResult = document.getElementById("detectResult");
 const detectCount = document.getElementById("detectCount");
+const detectServerMs = document.getElementById("detectServerMs");
+const detectTotalMs = document.getElementById("detectTotalMs");
+const detectBackend = document.getElementById("detectBackend");
 const detectImg = document.getElementById("detectImg");
 const detectOverlay = document.getElementById("detectOverlay");
 const detectActiveFace = document.getElementById("detectActiveFace");
 const detectFacesLabel = document.getElementById("detectFacesLabel");
+const detectNoFace = document.getElementById("detectNoFace");
+const detectImgWrap = document.getElementById("detectImgWrap");
 const detectFaceNav = document.getElementById("detectFaceNav");
 const detectPrev = document.getElementById("detectPrev");
 const detectNext = document.getElementById("detectNext");
@@ -86,21 +91,30 @@ detectForm.addEventListener("submit", async (e) => {
     detectBtn.disabled = true;
 
     const fd = new FormData(detectForm);
+    const t0 = performance.now();
     try {
         const res = await fetch("/api/detect", { method: "POST", body: fd });
         const data = await res.json();
+        const totalMs = Math.round(performance.now() - t0);
         if (!res.ok) throw new Error(data.error || "Request failed");
 
+        detectServerMs.textContent = data.processing_ms != null ? data.processing_ms + " ms" : "—";
+        detectTotalMs.textContent = totalMs + " ms";
+        detectBackend.textContent = data.backend || "—";
         detectCount.textContent = data.face_count;
         detectImg.src = data.image;
         if (data.faces.length === 0) {
             detectFacesLabel.classList.add("hidden");
             detectFaceNav.classList.add("hidden");
             detectActiveFace.classList.add("hidden");
+            detectImgWrap.classList.add("hidden");
+            detectNoFace.classList.remove("hidden");
             detectOverlay.innerHTML = "";
             detectState = null;
         } else {
             detectFacesLabel.classList.remove("hidden");
+            detectImgWrap.classList.remove("hidden");
+            detectNoFace.classList.add("hidden");
             detectState = { data, selectedIdx: 0 };
             renderDetectSelection(0);
         }
@@ -127,6 +141,10 @@ const compareBtn = document.getElementById("compareBtn");
 const compareLoader = document.getElementById("compareLoader");
 const compareError = document.getElementById("compareError");
 const compareResult = document.getElementById("compareResult");
+const compareTiming = document.getElementById("compareTiming");
+const compareServerMs = document.getElementById("compareServerMs");
+const compareTotalMs = document.getElementById("compareTotalMs");
+const compareBackend = document.getElementById("compareBackend");
 const compareVerdict = document.getElementById("compareVerdict");
 const cmpSimilarity = document.getElementById("cmpSimilarity");
 const metricsGrid = document.getElementById("metricsGrid");
@@ -322,13 +340,22 @@ compareForm.addEventListener("submit", async (e) => {
     if (!compareFile1.files[0] || !compareFile2.files[0]) return;
     hide(compareError);
     hide(compareResult);
+    hide(compareTiming);
     show(compareLoader);
     compareBtn.disabled = true;
 
     const fd = new FormData(compareForm);
+    const t0 = performance.now();
     try {
         const res = await fetch("/api/compare", { method: "POST", body: fd });
         const data = await res.json();
+        const totalMs = Math.round(performance.now() - t0);
+
+        compareServerMs.textContent = data.processing_ms != null ? data.processing_ms + " ms" : "—";
+        compareTotalMs.textContent = totalMs + " ms";
+        compareBackend.textContent = data.backend || "—";
+        show(compareTiming);
+
         if (!res.ok) throw new Error(data.error || "Request failed");
 
         cmpCount1.textContent = data.face_count_1;

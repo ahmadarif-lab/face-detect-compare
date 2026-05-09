@@ -328,15 +328,10 @@ body {
     margin-bottom: 16px;
 }
 .badge-count {
-    display: inline-flex; align-items: center; justify-content: center;
-    min-width: 36px; padding: 4px 12px;
-    background: rgba(16, 185, 129, 0.18);
-    color: #6ee7b7;
-    border: 1px solid rgba(16, 185, 129, 0.4);
-    border-radius: 999px;
     font-family: 'JetBrains Mono', monospace;
     font-weight: 700;
-    font-size: 1.05rem;
+    font-size: 0.82rem;
+    color: #6ee7b7;
 }
 
 .result-img {
@@ -953,6 +948,36 @@ body {
     80%  { opacity: 1; }
     100% { left: calc(100% - 6px); opacity: 0; }
 }
+
+/* ---------- Timing badge ---------- */
+.timing-bar {
+    display: flex; align-items: center; gap: 16px;
+    margin-top: 14px;
+    margin-bottom: 14px;
+    padding: 8px 14px;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--dim);
+}
+.timing-bar .t-item { display: flex; align-items: center; gap: 6px; }
+.timing-bar .t-label { color: var(--dim); }
+.timing-bar .t-val { color: var(--accent); font-weight: 600; }
+.timing-bar .t-sep { color: var(--border-strong); }
+
+/* ---------- No-face message ---------- */
+.no-face-msg {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 18px;
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+    font-size: 0.9rem;
+}
+.no-face-msg svg { flex-shrink: 0; opacity: 0.8; }
 
 /* ---------- Footer ---------- */
 .footer {

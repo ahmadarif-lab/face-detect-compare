@@ -97,13 +97,24 @@
                     Belum ada hasil. Upload foto lalu klik <b>Deteksi Wajah</b>.
                 </div>
                 <div id="detectResult" class="hidden">
+                    <div class="timing-bar" id="detectTiming">
+                        <div class="t-item"><span class="t-label">server</span><span class="t-val" id="detectServerMs">—</span></div>
+                        <span class="t-sep">·</span>
+                        <div class="t-item"><span class="t-label">total</span><span class="t-val" id="detectTotalMs">—</span></div>
+                        <span class="t-sep">·</span>
+                        <div class="t-item"><span class="t-label">backend</span><span class="t-val" id="detectBackend">—</span></div>
+                    </div>
                     <div class="badge-row">
                         <span class="badge-count" id="detectCount">0</span>
                         <span>wajah terdeteksi</span>
                         <span class="legend"><span class="dot dot-active"></span>aktif</span>
                         <span class="legend"><span class="dot dot-other"></span>lainnya</span>
                     </div>
-                    <div class="overlay-wrap interactive">
+                    <div id="detectNoFace" class="no-face-msg hidden">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 15s1.5-2 4-2 4 2 4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                        Tidak ada wajah terdeteksi pada foto ini.
+                    </div>
+                    <div class="overlay-wrap interactive" id="detectImgWrap">
                         <img id="detectImg" alt="">
                         <svg id="detectOverlay" preserveAspectRatio="xMidYMid meet"></svg>
                     </div>
@@ -184,6 +195,14 @@
                     </div>
                 </div>
                 <div class="scan-text"><span class="led"></span><span>MATCHING FACES<span class="dots"></span></span></div>
+            </div>
+
+            <div class="timing-bar hidden" id="compareTiming">
+                <div class="t-item"><span class="t-label">server</span><span class="t-val" id="compareServerMs">—</span></div>
+                <span class="t-sep">·</span>
+                <div class="t-item"><span class="t-label">total</span><span class="t-val" id="compareTotalMs">—</span></div>
+                <span class="t-sep">·</span>
+                <div class="t-item"><span class="t-label">backend</span><span class="t-val" id="compareBackend">—</span></div>
             </div>
 
             <div id="compareError" class="alert alert-danger hidden"></div>
