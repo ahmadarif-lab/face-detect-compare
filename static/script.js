@@ -260,7 +260,7 @@ cmpOverlay1.addEventListener("click", (e) => {
     const idx1 = parseInt(g.getAttribute("data-face-idx"), 10);
     if (Number.isNaN(idx1)) return;
     const m = cmpState.data.matches_1to2;
-    if (m && m[idx1]) renderSelection(m[idx1].match_index);
+    if (m && idx1 < m.length) renderSelection(m[idx1]);
 });
 
 function renderDetectSelection(idx) {

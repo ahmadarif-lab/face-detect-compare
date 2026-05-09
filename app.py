@@ -1,5 +1,6 @@
 import base64
 import os
+import tempfile
 import time
 import uuid
 from io import BytesIO
@@ -9,22 +10,26 @@ import numpy as np
 from flask import Flask, jsonify, render_template, request
 from PIL import Image
 
+# ---------------------------------------------------------------------------
+# Config & constants
+# ---------------------------------------------------------------------------
+
 # FACE_BACKEND=deepface (default) atau FACE_BACKEND=onnx
 FACE_BACKEND = os.environ.get("FACE_BACKEND", "deepface").lower()
 
-if FACE_BACKEND == "onnx":
-    from insightface.app import FaceAnalysis as _FaceAnalysis
-    _insight_app = _FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-    _insight_app.prepare(ctx_id=0, det_size=(640, 640))
-else:
-    from retinaface import RetinaFace
-    from deepface import DeepFace
+DETECTION_SIZE = (640, 640)
+WARMUP_IMG_SHAPE = (112, 112, 3)
+WARMUP_PIXEL_VALUE = 128
+JPEG_QUALITY_FULL = 92
+JPEG_QUALITY_CROP = 90
+ONNX_PADDING_RATIO = 0.5  # 50% per side fallback for close-up faces
+NORM_EPS = 1e-12
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 ALLOWED_EXT = {"png", "jpg", "jpeg", "bmp", "webp"}
 MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB
 
-# ArcFace + cosine threshold (default deepface).
+# ArcFace + cosine threshold (deepface default).
 ARCFACE_COSINE_THRESHOLD = 0.68
 
 # Per-metric thresholds for ArcFace (deepface defaults; None = no canonical threshold).
@@ -44,6 +49,18 @@ METRIC_LABELS = {
     "chebyshev": "Chebyshev",
 }
 
+# ---------------------------------------------------------------------------
+# Backend init
+# ---------------------------------------------------------------------------
+
+if FACE_BACKEND == "onnx":
+    from insightface.app import FaceAnalysis as _FaceAnalysis
+    _insight_app = _FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+    _insight_app.prepare(ctx_id=0, det_size=DETECTION_SIZE)
+else:
+    from retinaface import RetinaFace
+    from deepface import DeepFace
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
@@ -56,39 +73,44 @@ class FaceNotFoundError(Exception):
 
 def _warmup_models():
     """Load model weights at startup so the first request is not slow."""
-    import tempfile
     print(f"[startup] backend={FACE_BACKEND} — loading models...", flush=True)
     if FACE_BACKEND == "onnx":
-        # InsightFace is already initialized at module level; run one dummy
-        # inference to load ONNX graph into memory.
+        # InsightFace already initialized at module level; one dummy inference
+        # forces ONNX graph fully into memory.
         dummy = np.zeros((64, 64, 3), dtype=np.uint8)
         _insight_app.get(dummy)
     else:
-        dummy = np.full((112, 112, 3), 128, dtype=np.uint8)
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
-            dummy_path = f.name
-            from PIL import Image as _Img
-            _Img.fromarray(dummy).save(f, format="JPEG")
-        try:
-            RetinaFace.detect_faces(dummy_path)
-            DeepFace.represent(img_path=dummy, model_name="ArcFace",
-                               enforce_detection=False, detector_backend="skip")
-        except Exception:
-            pass
-        finally:
-            os.remove(dummy_path)
+        dummy = np.full(WARMUP_IMG_SHAPE, WARMUP_PIXEL_VALUE, dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as td:
+            dummy_path = os.path.join(td, "warmup.jpg")
+            Image.fromarray(dummy).save(dummy_path, format="JPEG")
+            try:
+                RetinaFace.detect_faces(dummy_path)
+                DeepFace.represent(img_path=dummy, model_name="ArcFace",
+                                   enforce_detection=False, detector_backend="skip")
+            except Exception as e:
+                print(f"[startup] warmup non-fatal error: {e}", flush=True)
     print("[startup] models ready.", flush=True)
 
 
 _warmup_models()
 
 
+# ---------------------------------------------------------------------------
+# I/O helpers
+# ---------------------------------------------------------------------------
+
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 
 def save_upload(file_storage) -> str:
-    ext = file_storage.filename.rsplit(".", 1)[1].lower()
+    # UUID stem prevents path traversal regardless of input filename;
+    # only the extension needs validation.
+    name = file_storage.filename or ""
+    ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
+    if ext not in ALLOWED_EXT:
+        raise ValueError(f"Unsupported extension: {ext!r}")
     path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4().hex}.{ext}")
     file_storage.save(path)
     return path
@@ -99,7 +121,7 @@ def image_to_jpeg_b64(img_path: str) -> tuple[str, int, int]:
         im = im.convert("RGB")
         w, h = im.size
         buf = BytesIO()
-        im.save(buf, format="JPEG", quality=92)
+        im.save(buf, format="JPEG", quality=JPEG_QUALITY_FULL)
     return base64.b64encode(buf.getvalue()).decode("utf-8"), w, h
 
 
@@ -108,21 +130,26 @@ def crop_b64(img_path: str, bbox: list) -> str:
     x1, y1, x2, y2 = bbox
     crop = img.crop((x1, y1, x2, y2))
     buf = BytesIO()
-    crop.save(buf, format="JPEG", quality=90)
+    crop.save(buf, format="JPEG", quality=JPEG_QUALITY_CROP)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+# ---------------------------------------------------------------------------
+# Distance / metric helpers
+# ---------------------------------------------------------------------------
+
 def cosine_distance(a: np.ndarray, b: np.ndarray) -> float:
-    return float(1.0 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+    denom = np.linalg.norm(a) * np.linalg.norm(b) + NORM_EPS
+    return float(1.0 - np.dot(a, b) / denom)
 
 
 def compute_all_distances(a: np.ndarray, b: np.ndarray) -> dict:
-    a_n = a / np.linalg.norm(a)
-    b_n = b / np.linalg.norm(b)
+    a_n = a / (np.linalg.norm(a) + NORM_EPS)
+    b_n = b / (np.linalg.norm(b) + NORM_EPS)
     diff = a - b
     diff_n = a_n - b_n
     return {
-        "cosine": float(1.0 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))),
+        "cosine": cosine_distance(a, b),
         "euclidean": float(np.linalg.norm(diff)),
         "euclidean_l2": float(np.linalg.norm(diff_n)),
         "manhattan": float(np.sum(np.abs(diff))),
@@ -151,6 +178,34 @@ def build_metric_rows(distances: dict) -> list:
     return rows
 
 
+def pairwise_cosine_distances(embs1: list, embs2: list) -> np.ndarray:
+    """Full (len(embs1) x len(embs2)) cosine distance matrix."""
+    A = np.stack(embs1).astype(np.float32)
+    B = np.stack(embs2).astype(np.float32)
+    A_n = A / (np.linalg.norm(A, axis=1, keepdims=True) + NORM_EPS)
+    B_n = B / (np.linalg.norm(B, axis=1, keepdims=True) + NORM_EPS)
+    return 1.0 - A_n @ B_n.T
+
+
+def best_match_from_matrix(dist_matrix: np.ndarray):
+    """(row, col, distance) of the closest pair."""
+    i, j = np.unravel_index(np.argmin(dist_matrix), dist_matrix.shape)
+    return int(i), int(j), float(dist_matrix[i, j])
+
+
+def per_face_best_from_matrix(dist_matrix: np.ndarray) -> list:
+    """For each row, return (best_col_index, distance)."""
+    if dist_matrix.size == 0:
+        return []
+    j = np.argmin(dist_matrix, axis=1)
+    d = dist_matrix[np.arange(dist_matrix.shape[0]), j]
+    return [(int(j[i]), float(d[i])) for i in range(len(j))]
+
+
+# ---------------------------------------------------------------------------
+# Detection / embedding
+# ---------------------------------------------------------------------------
+
 def _onnx_get_faces(img_path: str):
     """Run InsightFace with automatic padding fallback for close-up images.
 
@@ -164,15 +219,17 @@ def _onnx_get_faces(img_path: str):
         return faces, img
 
     h, w = img.shape[:2]
-    ph, pw = h // 2, w // 2
+    ph, pw = int(h * ONNX_PADDING_RATIO), int(w * ONNX_PADDING_RATIO)
     canvas = np.zeros((h + ph * 2, w + pw * 2, 3), dtype=np.uint8)
     canvas[ph:ph + h, pw:pw + w] = img
     faces = _insight_app.get(canvas)
     for f in faces:
-        f.bbox[[0, 2]] -= pw
-        f.bbox[[1, 3]] -= ph
-        np.clip(f.bbox[[0, 2]], 0, w - 1, out=f.bbox[[0, 2]])
-        np.clip(f.bbox[[1, 3]], 0, h - 1, out=f.bbox[[1, 3]])
+        # Slice indexing returns a view (in-place writable). Fancy indexing
+        # would return a copy and the np.clip(..., out=...) below would no-op.
+        f.bbox[0::2] -= pw  # x1, x2
+        f.bbox[1::2] -= ph  # y1, y2
+        np.clip(f.bbox[0::2], 0, w - 1, out=f.bbox[0::2])
+        np.clip(f.bbox[1::2], 0, h - 1, out=f.bbox[1::2])
         if f.kps is not None:
             f.kps[:, 0] -= pw
             f.kps[:, 1] -= ph
@@ -180,40 +237,27 @@ def _onnx_get_faces(img_path: str):
 
 
 def detect_faces_raw(img_path: str) -> list:
-    """Detect all faces. Returns list of {facial_area, score, landmarks}."""
+    """Detect all faces. Returns list of {facial_area, score}."""
     if FACE_BACKEND == "onnx":
         faces, _ = _onnx_get_faces(img_path)
-        result = []
-        for f in faces:
-            x1, y1, x2, y2 = [int(v) for v in f.bbox]
-            kps = f.kps
-            result.append({
-                "facial_area": [x1, y1, x2, y2],
-                "score": float(f.det_score),
-                "landmarks": {
-                    "left_eye":    [float(kps[0][0]), float(kps[0][1])],
-                    "right_eye":   [float(kps[1][0]), float(kps[1][1])],
-                    "nose":        [float(kps[2][0]), float(kps[2][1])],
-                    "mouth_left":  [float(kps[3][0]), float(kps[3][1])],
-                    "mouth_right": [float(kps[4][0]), float(kps[4][1])],
-                },
-            })
-        return result
-    else:
-        detections = RetinaFace.detect_faces(img_path)
-        if not isinstance(detections, dict) or not detections:
-            return []
         return [
             {
-                "facial_area": [int(v) for v in face["facial_area"]],
-                "score": float(face["score"]),
-                "landmarks": {
-                    name: [float(p) for p in pt]
-                    for name, pt in face["landmarks"].items()
-                },
+                "facial_area": [int(v) for v in f.bbox],
+                "score": float(f.det_score),
             }
-            for face in detections.values()
+            for f in faces
         ]
+
+    detections = RetinaFace.detect_faces(img_path)
+    if not isinstance(detections, dict) or not detections:
+        return []
+    return [
+        {
+            "facial_area": [int(v) for v in face["facial_area"]],
+            "score": float(face["score"]),
+        }
+        for face in detections.values()
+    ]
 
 
 def get_faces_with_embeddings(img_path: str):
@@ -239,9 +283,8 @@ def get_faces_with_embeddings(img_path: str):
     for i, face in enumerate(detections.values()):
         if i >= len(aligned):
             break
-        face_rgb = aligned[i]
         # RetinaFace returns RGB; DeepFace.represent expects BGR for numpy input.
-        face_bgr = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2BGR)
+        face_bgr = cv2.cvtColor(aligned[i], cv2.COLOR_RGB2BGR)
         rep = DeepFace.represent(
             img_path=face_bgr,
             model_name="ArcFace",
@@ -253,32 +296,9 @@ def get_faces_with_embeddings(img_path: str):
     return embeddings, bboxes
 
 
-def best_match(embs1, embs2):
-    """Return (i, j, distance) for the closest pair across both lists."""
-    best = None
-    for i, e1 in enumerate(embs1):
-        for j, e2 in enumerate(embs2):
-            d = cosine_distance(e1, e2)
-            if best is None or d < best[2]:
-                best = (i, j, d)
-    return best
-
-
-def per_face_best(source_embs, target_embs):
-    """For each embedding in source, find its closest in target.
-
-    Returns list of (target_index, distance) parallel to source_embs.
-    """
-    results = []
-    for e_src in source_embs:
-        best_j, best_d = None, None
-        for j, e_tgt in enumerate(target_embs):
-            d = cosine_distance(e_src, e_tgt)
-            if best_d is None or d < best_d:
-                best_j, best_d = j, d
-        results.append((best_j, best_d))
-    return results
-
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 @app.route("/")
 def index():
@@ -289,12 +309,13 @@ def index():
 def detect():
     file = request.files.get("image")
     if not file or file.filename == "":
-        return jsonify({"error": "No image uploaded"}), 400
+        return jsonify({"error": "Tidak ada gambar yang diunggah"}), 400
     if not allowed_file(file.filename):
-        return jsonify({"error": "Unsupported file type"}), 400
+        return jsonify({"error": "Tipe file tidak didukung"}), 400
 
-    path = save_upload(file)
+    path = None
     try:
+        path = save_upload(file)
         t0 = time.perf_counter()
         faces_raw = detect_faces_raw(path)
         processing_ms = round((time.perf_counter() - t0) * 1000)
@@ -311,14 +332,12 @@ def detect():
             })
 
         face_list = []
-        for i, face in enumerate(faces_raw):
+        for face in faces_raw:
             bbox = face["facial_area"]
             face_list.append({
-                "id": f"face_{i + 1}",
                 "score": round(face["score"], 4),
                 "facial_area": bbox,
                 "crop": "data:image/jpeg;base64," + crop_b64(path, bbox),
-                "landmarks": face["landmarks"],
             })
         return jsonify({
             "face_count": len(face_list),
@@ -330,9 +349,9 @@ def detect():
             "processing_ms": processing_ms,
         })
     except Exception as e:
-        return jsonify({"error": f"Detection failed: {e}"}), 500
+        return jsonify({"error": f"Deteksi gagal: {e}"}), 500
     finally:
-        if os.path.exists(path):
+        if path and os.path.exists(path):
             os.remove(path)
 
 
@@ -341,14 +360,16 @@ def compare():
     f1 = request.files.get("image1")
     f2 = request.files.get("image2")
     if not f1 or not f2 or f1.filename == "" or f2.filename == "":
-        return jsonify({"error": "Two images are required"}), 400
+        return jsonify({"error": "Dua gambar diperlukan"}), 400
     if not (allowed_file(f1.filename) and allowed_file(f2.filename)):
-        return jsonify({"error": "Unsupported file type"}), 400
+        return jsonify({"error": "Tipe file tidak didukung"}), 400
 
-    p1 = save_upload(f1)
-    p2 = save_upload(f2)
+    t0 = time.perf_counter()
+    p1 = p2 = None
     try:
-        t0 = time.perf_counter()
+        p1 = save_upload(f1)
+        p2 = save_upload(f2)
+
         embs1, boxes1 = get_faces_with_embeddings(p1)
         embs2, boxes2 = get_faces_with_embeddings(p2)
         if not embs1:
@@ -356,9 +377,12 @@ def compare():
         if not embs2:
             raise FaceNotFoundError("Tidak ada wajah terdeteksi di foto 2")
 
-        i, j, distance = best_match(embs1, embs2)
+        # Compute pairwise distances once; reuse for best-match and per-face matches.
+        D_12 = pairwise_cosine_distances(embs1, embs2)  # rows=img1, cols=img2
+        D_21 = D_12.T
+
+        _, best_idx_2, _ = best_match_from_matrix(D_12)
         threshold = ARCFACE_COSINE_THRESHOLD
-        similarity = max(0.0, 1.0 - distance) * 100.0
 
         crops_1 = ["data:image/jpeg;base64," + crop_b64(p1, b) for b in boxes1]
         crops_2 = ["data:image/jpeg;base64," + crop_b64(p2, b) for b in boxes2]
@@ -366,43 +390,25 @@ def compare():
         img2_b64, w2, h2 = image_to_jpeg_b64(p2)
 
         matches_2to1 = []
-        for idx, (mj, md) in enumerate(per_face_best(embs2, embs1)):
+        for idx, (mj, md) in enumerate(per_face_best_from_matrix(D_21)):
             distances = compute_all_distances(embs2[idx], embs1[mj])
             matches_2to1.append({
-                "face_index": idx,
                 "match_index": mj,
-                "distance": round(md, 4),
                 "similarity_percent": round(max(0.0, 1.0 - md) * 100.0, 2),
                 "verified": bool(md <= threshold),
                 "metrics": build_metric_rows(distances),
             })
 
-        matches_1to2 = [
-            {
-                "face_index": idx,
-                "match_index": mj,
-                "distance": round(md, 4),
-                "similarity_percent": round(max(0.0, 1.0 - md) * 100.0, 2),
-                "verified": bool(md <= threshold),
-            }
-            for idx, (mj, md) in enumerate(per_face_best(embs1, embs2))
-        ]
+        # Reverse lookup only — UI uses this to navigate from img1 click to img2 face.
+        matches_1to2 = [mj for mj, _md in per_face_best_from_matrix(D_12)]
 
         processing_ms = round((time.perf_counter() - t0) * 1000)
         return jsonify({
-            "verified": bool(distance <= threshold),
-            "distance": round(distance, 4),
-            "threshold": threshold,
-            "similarity_percent": round(similarity, 2),
-            "model": "ArcFace",
-            "detector_backend": "retinaface" if FACE_BACKEND == "tensorflow" else "insightface",
             "backend": FACE_BACKEND,
             "processing_ms": processing_ms,
-            "similarity_metric": "cosine",
             "face_count_1": len(boxes1),
             "face_count_2": len(boxes2),
-            "best_match_index_1": i,
-            "best_match_index_2": j,
+            "best_match_index_2": best_idx_2,
             "image1": "data:image/jpeg;base64," + img1_b64,
             "image2": "data:image/jpeg;base64," + img2_b64,
             "image1_w": w1, "image1_h": h1,
@@ -418,13 +424,14 @@ def compare():
         processing_ms = round((time.perf_counter() - t0) * 1000)
         return jsonify({"error": str(e), "processing_ms": processing_ms, "backend": FACE_BACKEND}), 400
     except Exception as e:
-        return jsonify({"error": f"Comparison failed: {e}"}), 500
+        return jsonify({"error": f"Perbandingan gagal: {e}"}), 500
     finally:
         for p in (p1, p2):
-            if os.path.exists(p):
+            if p and os.path.exists(p):
                 os.remove(p)
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=port, debug=debug)
