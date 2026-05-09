@@ -9,8 +9,8 @@ import numpy as np
 from flask import Flask, jsonify, render_template, request
 from PIL import Image
 
-# FACE_BACKEND=tensorflow (default) atau FACE_BACKEND=onnx
-FACE_BACKEND = os.environ.get("FACE_BACKEND", "onnx").lower()
+# FACE_BACKEND=deepface (default) atau FACE_BACKEND=onnx
+FACE_BACKEND = os.environ.get("FACE_BACKEND", "deepface").lower()
 
 if FACE_BACKEND == "onnx":
     from insightface.app import FaceAnalysis as _FaceAnalysis
