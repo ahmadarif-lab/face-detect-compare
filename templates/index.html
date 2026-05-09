@@ -24,7 +24,7 @@
         </div>
         <div>
             <h1>Face Detection &amp; Compare</h1>
-            <span class="brand-sub">RetinaFace · ArcFace</span>
+            <span class="brand-sub">{{ detector_name }} · ArcFace</span>
         </div>
     </div>
     <div class="status-pill"><span class="status-led"></span> SYSTEM ONLINE</div>
@@ -52,7 +52,7 @@
             <div class="card">
                 <div class="card-head">
                     <h2>Upload Foto</h2>
-                    <p>Deteksi semua wajah pada satu foto dengan RetinaFace.</p>
+                    <p>Deteksi semua wajah pada satu foto dengan {{ detector_name }}.</p>
                 </div>
                 <form id="detectForm">
                     <label class="dropzone" id="detectDrop">
@@ -286,12 +286,22 @@
                 <p>Penjelasan rumus, threshold, dan referensi untuk metrik distance yang dipakai aplikasi.</p>
             </div>
             <div class="metric-info-body">
-                        <h4>RetinaFace vs ArcFace — apa bedanya?</h4>
+                        <h4>Face Detector + ArcFace — pipeline 2 langkah</h4>
                         <p class="hint-note">
-                            <b>RetinaFace</b> hanyalah <i>nama model</i> untuk <b>mendeteksi posisi wajah</b> di dalam foto (bounding box + landmark). Walau namanya mengandung kata "retina", model ini <b>tidak mendeteksi retina mata</b> — itu hanya nama yang dipilih oleh penelitinya. RetinaFace juga <b>tidak dipakai untuk membandingkan wajah</b>.<br><br>
-                            <b>ArcFace</b> adalah model berbeda yang dipakai untuk <b>membandingkan kemiripan wajah</b>. Ia mengubah tiap wajah jadi vektor 512-dimensi (embedding), lalu jarak antar vektor diukur untuk menentukan apakah dua wajah identitas yang sama.<br><br>
-                            Singkatnya: tab <b>Detect</b> memakai RetinaFace (cari wajah), tab <b>Compare</b> memakai RetinaFace + ArcFace (cari wajah lalu bandingkan).
+                            Pipeline app ini selalu 2 langkah: <b>cari posisi wajah</b> dulu, baru <b>bandingkan identitas</b>. Detector dan recognition adalah model berbeda dengan tugas berbeda.<br><br>
+                            <b>{{ detector_name }}</b> (detector aktif sekarang) bertugas menemukan posisi wajah di foto — output-nya bounding box + landmark mata/hidung/mulut. Detector <b>tidak dipakai untuk membandingkan wajah</b>.<br><br>
+                            <b>ArcFace</b> adalah model recognition yang mengubah tiap wajah jadi vektor 512-dimensi (embedding). Jarak antar embedding diukur untuk menentukan apakah dua wajah identitas yang sama.<br><br>
+                            Singkatnya: tab <b>Detect</b> pakai {{ detector_name }} (cari wajah), tab <b>Compare</b> pakai {{ detector_name }} + ArcFace (cari wajah lalu bandingkan).
                         </p>
+
+                        <h4>Dua backend: SCRFD vs RetinaFace</h4>
+                        <p>App ini support 2 backend yang dipilih saat startup lewat env var <code>FACE_BACKEND</code>:</p>
+                        <ul>
+                            <li><b>Backend <code>onnx</code></b> (default) — pakai <b>SCRFD</b> sebagai detector + ArcFace ONNX (bundle <code>buffalo_l</code> dari InsightFace).</li>
+                            <li><b>Backend <code>deepface</code></b> — pakai <b>RetinaFace</b> sebagai detector + ArcFace TF/Keras (lib <code>retina-face</code> + <code>deepface</code>).</li>
+                        </ul>
+                        <p>Keduanya dari lab penelitian yang sama (InsightFace, Jiankang Deng dkk). <b>SCRFD adalah generasi penerus RetinaFace</b> — dirilis 2021 dengan teknik <i>sample &amp; computation redistribution</i>, akurasi sedikit lebih baik di kondisi sulit (WIDER Face hard set) dan lebih efisien per FLOP. Walau nama "RetinaFace" mengandung kata "retina", model ini <b>tidak mendeteksi retina mata</b> — itu hanya nama yang dipilih oleh penelitinya.</p>
+                        <p><b>Untuk recognition (ArcFace) keduanya sama persis</b> — yang beda hanya implementasi (ONNX vs TF/Keras). Embedding 512-dim yang dihasilkan kompatibel di kedua backend.</p>
 
                         <h4>Embedding 512-dimensi itu isinya apa?</h4>
                         <p>Embedding adalah <b>daftar 512 angka</b> hasil "perasan" model ArcFace dari satu wajah. Bayangkan setiap wajah diringkas jadi satu deret angka panjang seperti ini:</p>
@@ -391,7 +401,11 @@
                                 <a href="https://arxiv.org/abs/1801.07698" target="_blank" rel="noopener">arxiv.org/abs/1801.07698</a>
                             </li>
                             <li>
-                                <b>RetinaFace</b> — Deng et al., <i>"RetinaFace: Single-stage Dense Face Localisation in the Wild"</i>, 2019.
+                                <b>SCRFD</b> — Guo et al., <i>"Sample and Computation Redistribution for Efficient Face Detection"</i>, ICLR 2022. <i>(detector untuk backend <code>onnx</code>)</i>
+                                <a href="https://arxiv.org/abs/2105.04714" target="_blank" rel="noopener">arxiv.org/abs/2105.04714</a>
+                            </li>
+                            <li>
+                                <b>RetinaFace</b> — Deng et al., <i>"RetinaFace: Single-stage Dense Face Localisation in the Wild"</i>, 2019. <i>(detector untuk backend <code>deepface</code>)</i>
                                 <a href="https://arxiv.org/abs/1905.00641" target="_blank" rel="noopener">arxiv.org/abs/1905.00641</a>
                             </li>
                             <li>
@@ -403,11 +417,15 @@
                         <p class="ref-group-label">Repository GitHub</p>
                         <ul class="ref-list">
                             <li>
-                                <b>serengil/deepface</b> — implementasi ArcFace + verifikasi multi-metrik.
+                                <b>deepinsight/insightface</b> — implementasi SCRFD + ArcFace ONNX (bundle <code>buffalo_l</code> / <code>buffalo_s</code>) untuk backend <code>onnx</code>.
+                                <a href="https://github.com/deepinsight/insightface" target="_blank" rel="noopener">github.com/deepinsight/insightface</a>
+                            </li>
+                            <li>
+                                <b>serengil/deepface</b> — implementasi ArcFace + verifikasi multi-metrik untuk backend <code>deepface</code>.
                                 <a href="https://github.com/serengil/deepface" target="_blank" rel="noopener">github.com/serengil/deepface</a>
                             </li>
                             <li>
-                                <b>serengil/retinaface</b> — implementasi RetinaFace untuk face detection.
+                                <b>serengil/retinaface</b> — implementasi RetinaFace untuk face detection (backend <code>deepface</code>).
                                 <a href="https://github.com/serengil/retinaface" target="_blank" rel="noopener">github.com/serengil/retinaface</a>
                             </li>
                         </ul>
@@ -440,7 +458,11 @@
 </main>
 
 <footer class="footer">
+    {% if backend == "onnx" %}
+    <span>Powered by <a href="https://github.com/deepinsight/insightface" target="_blank" rel="noopener">deepinsight/insightface</a> (SCRFD + ArcFace ONNX)</span>
+    {% else %}
     <span>Powered by <a href="https://github.com/serengil/retinaface" target="_blank" rel="noopener">serengil/retinaface</a> + <a href="https://github.com/serengil/deepface" target="_blank" rel="noopener">deepface</a></span>
+    {% endif %}
 </footer>
 
 <script src="{{ url_for('static', filename='script.js') }}"></script>

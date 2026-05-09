@@ -39,8 +39,10 @@ App mendukung dua backend yang dipilih lewat env var `FACE_BACKEND`:
 
 | Backend | Detector | Embedding | Kelebihan |
 |---------|----------|-----------|-----------|
-| `onnx` (default) | SCRFD (ONNX) | ArcFace (ONNX) | Lebih cepat, footprint kecil, cocok untuk CPU & deployment |
-| `deepface`       | RetinaFace (TF) | ArcFace (TF/Keras) | Akurasi RetinaFace bagus untuk wajah kecil/multi-face |
+| `onnx` (default) | SCRFD (ONNX) | ArcFace (ONNX) | ~2× lebih cepat di CPU, footprint kecil, ideal untuk deployment |
+| `deepface`       | RetinaFace (TF) | ArcFace (TF/Keras) | Ekosistem `deepface` lengkap (multi-model, multi-metric library) |
+
+> **Note:** SCRFD (2021) adalah generasi penerus RetinaFace (2019) dari lab yang sama (InsightFace). Akurasi setara — SCRFD justru sedikit lebih baik di benchmark WIDER Face hard set, dengan compute lebih efisien. Untuk recognition keduanya pakai ArcFace yang sama persis, embedding 512-dim kompatibel.
 
 Tiap backend punya `requirements-*.txt` dan `Dockerfile` sendiri — pilih sesuai kebutuhan.
 

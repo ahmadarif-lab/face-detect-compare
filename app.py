@@ -309,7 +309,12 @@ def get_faces_with_embeddings(img_path: str):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    detector_name = "SCRFD" if FACE_BACKEND == "onnx" else "RetinaFace"
+    return render_template(
+        "index.html",
+        backend=FACE_BACKEND,
+        detector_name=detector_name,
+    )
 
 
 @app.route("/api/detect", methods=["POST"])
