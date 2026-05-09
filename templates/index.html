@@ -319,7 +319,7 @@
 
                         <p><b>Kenapa 512 angka?</b> Itu pilihan arsitektur ArcFace. Lebih sedikit dimensi → kurang ekspresif, susah membedakan jutaan orang. Lebih banyak → mahal komputasi tanpa banyak peningkatan akurasi. 512 dianggap sweet spot oleh para peneliti.</p>
 
-                        <p><b>Bagaimana cara membandingkan?</b> Kita ambil dua embedding (vektor 512 angka), lalu hitung <i>jarak</i>-nya pakai rumus seperti Cosine atau Euclidean. Kalau jaraknya kecil → wajah mirip. Kalau jaraknya besar → wajah beda. Threshold-nya sudah dikalibrasi DeepFace (lihat di bawah).</p>
+                        <p><b>Bagaimana cara membandingkan?</b> Kita ambil dua embedding (vektor 512 angka), lalu hitung <i>jarak</i>-nya pakai rumus seperti Cosine atau Euclidean. Kalau jaraknya kecil → wajah mirip. Kalau jaraknya besar → wajah beda. Threshold-nya dikalibrasi per backend — lihat bagian <i>"Threshold per backend"</i> di bawah.</p>
 
                         <h4>Rumus tiap algoritma</h4>
                         <p>Untuk dua vektor embedding ArcFace 512-dimensi <code>a</code> dan <code>b</code>:</p>
@@ -382,16 +382,36 @@
                         <p>ArcFace dilatih dengan <i>angular margin loss</i> — identitas wajah tersimpan di <b>arah</b> vektor, bukan panjangnya. Jadi Euclidean L2 biasanya lebih stabil untuk verifikasi wajah dibanding Euclidean biasa.</p>
                         <p>Secara matematis, Euclidean L2 dan Cosine sebenarnya membawa informasi yang sama (sudut antar vektor), dengan hubungan:</p>
                         <div class="formula-eq">Euclidean_L2² = 2 × Cosine_distance</div>
-                        <p>Itu sebabnya threshold-nya konsisten: Cosine <code>0.68</code> ↔ Euclidean L2 <code>√(2 × 0.68) ≈ 1.166</code>, dibulatkan jadi <code>1.13</code> ✓</p>
+                        <p>Itu sebabnya threshold DeepFace konsisten: Cosine <code>0.68</code> ↔ Euclidean L2 <code>√(2 × 0.68) ≈ 1.166</code>, dibulatkan jadi <code>1.13</code> ✓</p>
+
+                        <h4>Threshold per backend</h4>
+                        <p>Kedua backend menghasilkan ArcFace embedding 512-dim yang strukturnya sama, tapi threshold verifikasi-nya <b>berbeda</b> karena sumber kalibrasiya beda:</p>
+                        <table class="threshold-table">
+                            <thead>
+                                <tr><th>Metrik</th><th>Backend <code>onnx</code> (InsightFace)</th><th>Backend <code>deepface</code></th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><b>Cosine</b></td><td>0.50</td><td>0.68</td></tr>
+                                <tr><td>Euclidean</td><td>—</td><td>4.15</td></tr>
+                                <tr><td>Euclidean L2</td><td>—</td><td>1.13</td></tr>
+                                <tr><td>Manhattan</td><td>—</td><td>—</td></tr>
+                                <tr><td>Chebyshev</td><td>—</td><td>—</td></tr>
+                            </tbody>
+                        </table>
+                        <ul>
+                            <li><b>Backend <code>deepface</code></b> — threshold dipublikasikan resmi oleh serengil/deepface (<code>deepface/config/threshold.py</code>), hasil kalibrasi di dataset LFW. <code>cosine 0.68</code> adalah nilai default untuk ArcFace.</li>
+                            <li><b>Backend <code>onnx</code></b> — InsightFace tidak mempublikasikan threshold resmi. Nilai <code>cosine 0.50</code> adalah best-practice komunitas yang banyak dipakai (lebih strict dari deepface karena embedding InsightFace cenderung ter-cluster lebih ketat). Metrik lain tidak ada nilai kalibrasi yang teruji, sehingga ditampilkan sebagai info saja.</li>
+                        </ul>
+                        <p>Perbedaan threshold ini penting: dengan backend <code>deepface</code> cosine 0.65 dianggap MATCH, tapi dengan backend <code>onnx</code> (threshold 0.50) itu NO MATCH. Selalu perhatikan backend aktif saat menginterpretasi hasil.</p>
 
                         <h4>Kenapa threshold tiap algoritma berbeda?</h4>
-                        <p>Karena tiap rumus menghasilkan skala angka yang berbeda — distance Manhattan untuk pasangan wajah yang sama bisa puluhan, sedangkan Chebyshev cuma di angka satuan. Threshold <code>0.68 / 4.15 / 1.13</code> bukan dipilih sembarang — itu nilai kalibrasi resmi DeepFace, hasil pengujian ArcFace pada dataset wajah berlabel (LFW dll) untuk cari batas optimal "orang sama" vs "orang beda" per metrik.</p>
+                        <p>Karena tiap rumus menghasilkan skala angka yang berbeda — distance Manhattan untuk pasangan wajah yang sama bisa puluhan, sedangkan Chebyshev cuma di angka satuan. Threshold bukan dipilih sembarang — itu nilai kalibrasi hasil pengujian ArcFace pada dataset wajah berlabel (LFW dll) untuk cari batas optimal "orang sama" vs "orang beda" per metrik.</p>
 
                         <h4>Kenapa Manhattan &amp; Chebyshev cuma "INFO"?</h4>
-                        <p>DeepFace tidak menyediakan threshold resmi untuk dua metrik ini pada ArcFace, jadi tidak ada angka kalibrasi yang valid untuk memutuskan MATCH / NO MATCH. Keduanya tetap dihitung sebagai info tambahan untuk perbandingan, tapi tidak dipakai untuk verdict.</p>
+                        <p>Tidak ada threshold resmi (dari DeepFace maupun InsightFace) untuk dua metrik ini pada ArcFace, jadi tidak ada angka kalibrasi yang valid untuk memutuskan MATCH / NO MATCH. Keduanya tetap dihitung sebagai info tambahan, tapi tidak dipakai untuk verdict.</p>
 
                         <h4>Metrik mana yang paling utama?</h4>
-                        <p><b>Cosine</b>. Itu metrik default DeepFace untuk verifikasi ArcFace, dan paling stabil untuk embedding-nya. Verdict utama (MATCH / NO MATCH) di aplikasi ini selalu memakai cosine.</p>
+                        <p><b>Cosine</b>. Itu metrik yang paling stabil untuk embedding ArcFace (tidak sensitif magnitudo vektor). Verdict utama (MATCH / NO MATCH) di aplikasi ini selalu memakai cosine dengan threshold sesuai backend aktif.</p>
 
                         <h4>Sumber &amp; Referensi</h4>
                         <p class="ref-group-label">Paper Model</p>
@@ -430,15 +450,16 @@
                             </li>
                         </ul>
 
-                        <p class="ref-group-label">Threshold resmi DeepFace</p>
+                        <p class="ref-group-label">Threshold — sumber per backend</p>
                         <ul class="ref-list">
                             <li>
-                                Nilai threshold per model &amp; metrik di-hardcode di file config (ArcFace ada di baris 5 — <code>cosine: 0.68</code>, <code>euclidean: 4.15</code>, <code>euclidean_l2: 1.13</code>):
+                                <b>Backend <code>deepface</code></b> — threshold ArcFace di-hardcode di file config (<code>cosine: 0.68</code>, <code>euclidean: 4.15</code>, <code>euclidean_l2: 1.13</code>):
                                 <a href="https://github.com/serengil/deepface/blob/master/deepface/config/threshold.py#L5" target="_blank" rel="noopener">deepface/config/threshold.py</a>
+                                · lookup via <a href="https://github.com/serengil/deepface/blob/master/deepface/modules/verification.py#L477" target="_blank" rel="noopener">deepface/modules/verification.py</a>
                             </li>
                             <li>
-                                Lookup-nya lewat fungsi <code>find_threshold(model_name, distance_metric)</code> yang load dict di atas:
-                                <a href="https://github.com/serengil/deepface/blob/master/deepface/modules/verification.py#L477" target="_blank" rel="noopener">deepface/modules/verification.py</a>
+                                <b>Backend <code>onnx</code></b> — InsightFace tidak mempublikasikan threshold. Nilai <code>cosine: 0.50</code> adalah best-practice komunitas yang banyak dipakai; lihat diskusi di:
+                                <a href="https://github.com/deepinsight/insightface/issues/1071" target="_blank" rel="noopener">deepinsight/insightface #1071</a>
                             </li>
                         </ul>
 

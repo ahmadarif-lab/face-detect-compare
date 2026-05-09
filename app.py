@@ -29,17 +29,29 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 ALLOWED_EXT = {"png", "jpg", "jpeg", "bmp", "webp"}
 MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB
 
-# ArcFace + cosine threshold (deepface default).
-ARCFACE_COSINE_THRESHOLD = 0.68
-
-# Per-metric thresholds for ArcFace (deepface defaults; None = no canonical threshold).
-ARCFACE_THRESHOLDS = {
+# Per-metric thresholds — deepface values are officially published by serengil/deepface.
+# InsightFace does not publish thresholds; 0.50 is the widely-cited community value
+# (stricter than deepface's 0.68 because InsightFace embeddings sit in a tighter cluster).
+_ARCFACE_THRESHOLDS_DEEPFACE = {
     "cosine": 0.68,
     "euclidean": 4.15,
     "euclidean_l2": 1.13,
     "manhattan": None,
     "chebyshev": None,
 }
+_ARCFACE_THRESHOLDS_ONNX = {
+    "cosine": 0.50,  # InsightFace community best-practice
+    "euclidean": None,
+    "euclidean_l2": None,
+    "manhattan": None,
+    "chebyshev": None,
+}
+
+ARCFACE_THRESHOLDS = (
+    _ARCFACE_THRESHOLDS_DEEPFACE if FACE_BACKEND == "deepface"
+    else _ARCFACE_THRESHOLDS_ONNX
+)
+ARCFACE_COSINE_THRESHOLD = ARCFACE_THRESHOLDS["cosine"]
 
 METRIC_LABELS = {
     "cosine": "Cosine",

@@ -835,6 +835,27 @@ body {
     opacity: 0.7;
 }
 
+/* ---------- Threshold table ---------- */
+.threshold-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.83rem;
+    margin: 10px 0 12px;
+}
+.threshold-table th, .threshold-table td {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    text-align: left;
+}
+.threshold-table thead th {
+    background: rgba(56, 189, 248, 0.08);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+}
+.threshold-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+.threshold-table code { font-size: 0.78rem; }
+
 /* ---------- Hi-tech Loader ---------- */
 .loader {
     display: flex; flex-direction: column;
